@@ -22,6 +22,7 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
+import android.os.Build;
 
 import com.marianhello.bgloc.Config;
 import com.marianhello.bgloc.provider.AbstractLocationProvider;
@@ -45,7 +46,7 @@ public class DistanceFilterLocationProvider extends AbstractLocationProvider imp
     private static final String STATIONARY_LOCATION_MONITOR_ACTION = P_NAME + ".STATIONARY_LOCATION_MONITOR_ACTION";
 
     private static final long STATIONARY_TIMEOUT                                = 5 * 1000 * 60;    // 5 minutes.
-    private static final long STATIONARY_LOCATION_POLLING_INTERVAL_LAZY         = 3 * 1000 * 60;    // 3 minutes.
+    private static final long STATIONARY_LOCATION_POLLING_INTERVAL_LAZY         = 2 * 1000 * 60;    // 2 minutes.
     private static final long STATIONARY_LOCATION_POLLING_INTERVAL_AGGRESSIVE   = 1 * 1000 * 60;    // 1 minute.
     private static final int MAX_STATIONARY_ACQUISITION_ATTEMPTS = 5;
     private static final int MAX_SPEED_ACQUISITION_ATTEMPTS = 3;
@@ -112,10 +113,17 @@ public class DistanceFilterLocationProvider extends AbstractLocationProvider imp
 
         // Location criteria
         criteria = new Criteria();
-        criteria.setAltitudeRequired(false);
-        criteria.setBearingRequired(false);
+        criteria.setAltitudeRequired(true);
+        criteria.setBearingRequired(true);
         criteria.setSpeedRequired(true);
         criteria.setCostAllowed(true);
+        criteria.setAccuracy(Criteria.ACCURACY_FINE);
+        criteria.setHorizontalAccuracy(Criteria.ACCURACY_HIGH);
+        criteria.setSpeedAccuracy(Criteria.ACCURACY_HIGH);
+        criteria.setBearingAccuracy(Criteria.ACCURACY_HIGH);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            criteria.setVerticalAccuracy(Criteria.ACCURACY_HIGH);
+        }
     }
 
     @Override
@@ -212,7 +220,19 @@ public class DistanceFilterLocationProvider extends AbstractLocationProvider imp
                     }
                 }
             } else {
-                locationManager.requestLocationUpdates(locationManager.getBestProvider(criteria, true), mConfig.getInterval(), scaledDistanceFilter, this);
+                String provider = LocationManager.GPS_PROVIDER;
+                if (locationManager.isProviderEnabled(provider)) {
+                    logger.debug("Requesting regular updates from provider: {}", provider);
+                    locationManager.requestLocationUpdates(provider, mConfig.getInterval(), scaledDistanceFilter, this);
+                } else {
+                    provider = locationManager.getBestProvider(criteria, true);
+                    if (provider != null) {
+                        logger.debug("Requesting updates from best provider: {}", provider);
+                        locationManager.requestLocationUpdates(provider, mConfig.getInterval(), scaledDistanceFilter, this);
+                    } else {
+                        logger.warn("No suitable location provider found for given criteria.");
+                    }
+                }
             }
         } catch (SecurityException e) {
             logger.error("Security exception: {}", e.getMessage());
@@ -352,7 +372,7 @@ public class DistanceFilterLocationProvider extends AbstractLocationProvider imp
 
     public void resetStationaryAlarm() {
         alarmManager.cancel(stationaryAlarmPI);
-        alarmManager.set(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + STATIONARY_TIMEOUT, stationaryAlarmPI); // Millisec * Second * Minute
+        alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + STATIONARY_TIMEOUT, stationaryAlarmPI);
     }
 
     private Integer calculateDistanceFilter(Float speed) {
@@ -416,12 +436,10 @@ public class DistanceFilterLocationProvider extends AbstractLocationProvider imp
     }
 
     public void startPollingStationaryLocation(long interval) {
-        // proximity-alerts don't seem to work while suspended in latest Android 4.42 (works in 4.03).  Have to use AlarmManager to sample
-        //  location at regular intervals with a one-shot.
         stationaryLocationPollingInterval = interval;
         alarmManager.cancel(stationaryLocationPollingPI);
-        long start = System.currentTimeMillis() + (60 * 1000);
-        alarmManager.setInexactRepeating(AlarmManager.RTC_WAKEUP, start, interval, stationaryLocationPollingPI);
+        long nextTriggerTime = System.currentTimeMillis() + interval;
+        alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextTriggerTime, stationaryLocationPollingPI);
     }
 
     public void onPollStationaryLocation(Location location) {
@@ -482,24 +500,27 @@ public class DistanceFilterLocationProvider extends AbstractLocationProvider imp
      * This is required because latest Android proximity-alerts don't seem to operate while suspended.  Regularly polling
      * the location seems to trigger the proximity-alerts while suspended.
      */
-    private BroadcastReceiver stationaryLocationMonitorReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent)
-        {
-            logger.info("Stationary location monitor fired");
-            playDebugTone(Tone.DIALTONE);
+        private BroadcastReceiver stationaryLocationMonitorReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent)
+            {
+                logger.info("Stationary location monitor fired");
+                playDebugTone(Tone.DIALTONE);
 
-            criteria.setAccuracy(Criteria.ACCURACY_FINE);
-            criteria.setHorizontalAccuracy(Criteria.ACCURACY_HIGH);
-            criteria.setPowerRequirement(Criteria.POWER_HIGH);
+                criteria.setAccuracy(Criteria.ACCURACY_FINE);
+                criteria.setHorizontalAccuracy(Criteria.ACCURACY_HIGH);
+                criteria.setPowerRequirement(Criteria.POWER_HIGH);
 
-            try {
-                locationManager.requestSingleUpdate(criteria, singleUpdatePI);
-            } catch (SecurityException e) {
-                logger.error("Security exception: {}", e.getMessage());
+                try {
+                    locationManager.requestSingleUpdate(criteria, singleUpdatePI);
+                } catch (SecurityException e) {
+                    logger.error("Security exception: {}", e.getMessage());
+                }
+
+                long nextTriggerTime = System.currentTimeMillis() + stationaryLocationPollingInterval;
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextTriggerTime, stationaryLocationPollingPI);
             }
-        }
-    };
+        };
 
     /**
      * Broadcast receiver which detects a user has exit his circular stationary-region determined by the greater of stationaryLocation.getAccuracy() OR stationaryRadius
