@@ -29,6 +29,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.Process;
+import android.content.pm.ServiceInfo;
 import androidx.annotation.Nullable;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
@@ -233,8 +234,12 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
                     config.getSmallNotificationIcon(),
                     config.getNotificationIconColor()
             );
-            startForeground(NOTIFICATION_ID, notification);
-            mIsInForeground = true;
+         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+    startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+} else {
+    startForeground(NOTIFICATION_ID, notification);
+}
+mIsInForeground = true;
         }
     }
 
@@ -373,12 +378,18 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
         mProvider.onConfigure(mConfig);
 
         sIsRunning = true;
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mProvider.onStart();
+      ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+    @Override
+    public void run() {
+        mProvider.onStart();
+
+        if (mConfig.getStartForeground()) {
+            if (!mIsInForeground) {
+                startForeground();
             }
-        });
+        }
+    }
+});
 
         Bundle bundle = new Bundle();
         bundle.putInt("action", MSG_ON_SERVICE_STARTED);
@@ -388,12 +399,13 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
 
     @Override
     public synchronized void startForegroundService() {
-        if (!mIsInForeground) {
-            startForeground();
-        }
-        if (!sIsRunning) {
-            start();
-        }
+      if (!mIsInForeground) {
+    startForeground(); // Only start if not already in foreground
+}
+
+if (!sIsRunning) {
+    start(); // Start the actual location logic
+}
     }
 
     @Override
@@ -428,7 +440,11 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
                 mProvider.onCommand(LocationProvider.CMD_SWITCH_MODE,
                         LocationProvider.FOREGROUND_MODE);
             }
-            super.startForeground(NOTIFICATION_ID, notification);
+           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+    super.startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+} else {
+    super.startForeground(NOTIFICATION_ID, notification);
+}
             mIsInForeground = true;
             logger.debug("Foreground service started with notification");
         } else {
