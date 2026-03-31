@@ -115,19 +115,19 @@ ext {
     }
 
     androidLibs = [
-        supportAnnotations: [group: 'com.android.support', name: 'support-annotations', version: '24.0.0'],
-        supportCompat: [group: 'com.android.support', name: 'support-compat', version: getSupportLibVersion()],
-        appcompat: [group: 'com.android.support', name: 'appcompat-v7', version: getSupportLibVersion()],
+        supportAnnotations: [group: 'androidx.annotation', name: 'annotation', version: '1.1.0'],
+        supportCompat: [group: 'androidx.core', name: 'core', version: '1.1.0'],
+        appcompat: [group: 'androidx.appcompat', name: 'appcompat', version: '1.1.0'],
         playServicesLocation: [group: 'com.google.android.gms', name: 'play-services-location', version: getPlayServicesVersion()],
-        testCore: [group: 'androidx.test', name: 'core', version: '1.0.0'],
+        testCore: [group: 'androidx.test', name: 'core', version: '1.1.0'],
         testRunner: [group: 'androidx.test', name: 'runner', version: SUPPORTX_TEST_VERSION],
         testRules: [group: 'androidx.test', name: 'rules', version: SUPPORTX_TEST_VERSION],
     ]
 
     testLibs = [
-        testRunner: [group: 'com.android.support.test', name: 'runner', version: SUPPORT_TEST_VERSION],
-        testRules: [group: 'com.android.support.test', name: 'rules', version: SUPPORT_TEST_VERSION],
-        uiautomator: [group: 'com.android.support.test.uiautomator', name: 'uiautomator-v18', version: UI_AUTOMATOR_VERSION],
+        testRunner: [group: 'androidx.test', name: 'runner', version: SUPPORTX_TEST_VERSION],
+        testRules: [group: 'androidx.test', name: 'rules', version: SUPPORTX_TEST_VERSION],
+        uiautomator: [group: 'androidx.test.uiautomator', name: 'uiautomator', version: '2.2.0'],
         junit: [group: 'junit', name: 'junit', version: JUNIT_VERSION],
         json: [group: 'org.json', name: 'json', version: '20140107'],
         powermockMockito: [group: 'org.powermock', name: 'powermock-api-mockito', version: POWERMOCK_VERSION],
